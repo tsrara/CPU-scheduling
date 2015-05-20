@@ -15,7 +15,10 @@
 struct process {
     int pid; /* Process ID */
     int burst; /* CPU Burst Time */
-
+//05.21
+    int io; /* IO Burst Time */
+    int arrival; /* Arrival Time */
+    
     int priority; /* Priority */
     int working; /* Working time, for round-robin scheduling */
     int waiting; /* Waiting time, for round-robin scheduling */
