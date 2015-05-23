@@ -1,314 +1,261 @@
-//
-//  main.c
-//  simulator
-//
-//  Created by Jina on 2015. 5. 21..
-//  Copyright (c) 2015년 Jina. All rights reserved.
-//
-
-/* Scheduling Simulation*/
-
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
 
-/* Process Data Structure */
-struct process {
-    int pid; /* Process ID */
-    int burst; /* CPU Burst Time */
-//05.21
-    int io; /* IO Burst Time */
-    int arrival; /* Arrival Time */
+typedef struct process
+{
+    int cpu_burst;
+    int io_burst;
     
-    int priority; /* Priority */
-    int working; /* Working time, for round-robin scheduling */
-    int waiting; /* Waiting time, for round-robin scheduling */
-    struct process *next;
-};
+    /* io_unit : I/O burst를 몇번에 나눠서 실행할지 결정.
+     
+     한번 실행할떄마다
+     cpu_per : (CPU Burst time / unit)의 올림값,
+     io_per : (IO Burst time / unit)의 올림값 만큼 실행!
+     
+     예를 들어 CPU burst time이 10이고 IO burst time이 5, mod가 3이라면
+     cpu가 4->4->2 unit 진행될때마다 io 2->2->1만큼씩 실행.
+    */
+    
+    int io_unit;
+    int arrival;
+    int turnaround;
+    int waiting;
+    int priority;
+    int pid;
+    
+    int cpu_per;
+    int io_per;
+    
+}process;
 
-/* Function Prototype Declarations */
-struct process *init_process (int pid, int burst, int priority);
-void fcfs (struct process *proc);
-void listprocs (struct process *proc);
-void priority (struct process *proc);
-void rr (struct process *proc, int quantum);
-void sjf (struct process *proc);
+//Ready Queue
+typedef struct RQ
+{
+    process pr[20];
+    int init[20]; //initial arrival time
+    int end[20];
+    /* 처음 arrival time을 RQ에 따로 저장, 그 이후로는 Waiting queue 직접대신 새 프로세스의 arrival time을 증가시켜서 간접적 i/o 수행 */
+    
+}RQ;
 
-/* Main Program Segment */
-int main (void) {
-    /* Initialize process list */
-    struct process *plist, *ptmp;
-    plist = init_process(1, 10, 3);
-    plist->next = init_process(2, 1, 1); ptmp = plist->next;
-    ptmp->next = init_process(3, 2, 3); ptmp = ptmp->next;
-    ptmp->next = init_process(4, 1, 4); ptmp = ptmp->next;
-    ptmp->next = init_process(5, 5, 2);
+//Arrival time for FCFS
+void sortArrival(process p[], int n, RQ *r);
+void FCFS(process p[], int n);
+
+//CPU burst time for SJF
+void sort_BT(process p[], int n, RQ*);
+void SJF_NP(process p[],int n);
+void SJF_P(process p[],int n);
+
+void disp_table(process p[],int n);
+void RR(process p[],int n, int QT);
+float cal_avgwt(process p[],int a);
+float cal_avgtat(process p[],int b);
+void display_table(process p[], int n);
+
+void display_table(process p[],int n)
+{
+    int i;
+    printf("\n\nPID\tARR\tCPU\tI/O\tUNI\t PRI");
+    for(i=0; i<n; i++)
+    {
+        printf("\n %d \t %d \t %d \t %d \t %d \t %d",p[i].pid, p[i].arrival,p[i].cpu_burst,p[i].io_burst,p[i].io_unit, p[i].priority);
+    }
+    printf("\n\n");
+}
+
+//arrival time으로 Ready Queue 정렬
+void sortArrival(process p[],int n, RQ *r){
+    int i,j;
+    process temp;
+    int tmp_end, tmp_init;
     
-    /* Perform simulations */
-    listprocs(plist);
-    fcfs(plist);
-    sjf(plist);
-    priority(plist);
-    rr(plist, 1);
+    //Ready Queue에 값 쓰기 및 초기화
+    for(i=0; i<n; i++){
+        r->pr[i] = p[i];
+    }
     
-    /* Terminate cleanly */
-    while (plist != NULL) {
-        ptmp = plist;
-        plist = plist->next;
-        free(ptmp);
-    };
-    return(0);
-};
+    //Ready Queue에 initial Process를 Arrival Time 순서로 정렬
+    for(i=0; i<n; i++){
+        for(j=i+1; j<n; j++){
+            if(r->pr[j].arrival < r->pr[i].arrival){
+                temp = r->pr[j];
+                tmp_end = r->end[j];
+                tmp_init = r->init[j];
+                
+                r->pr[j] = r->pr[i];
+                r->end[j] = r->end[i];
+                r->init[j] = r->init[i];
+                
+                r->pr[i] = temp;
+                r->end[i] = tmp_end;
+                r->init[i] = tmp_init;
+            }
+        }
+    }    //return 값 : Ready Queue
+}
+
+//CPU Burst time으로 Ready Queue 정렬
+void sortBurst(process p[],int n, RQ *r){
+    int i,j;
+    process temp;
+    int tmp_end, tmp_init;
+    
+    //Ready Queue에 값 쓰기 및 초기화
+    for(i=0; i<n; i++){
+        r->pr[i] = p[i];
+    }
+    
+    //Ready Queue에 initial Process를 Arrival Time 순서로 정렬
+    for(i=0; i<n; i++){
+        for(j=i+1; j<n; j++){
+            if(r->pr[j].cpu_burst < r->pr[i].cpu_burst){
+                temp = r->pr[j];
+                tmp_end = r->end[j];
+                tmp_init = r->init[j];
+                
+                r->pr[j] = r->pr[i];
+                r->end[j] = r->end[i];
+                r->init[j] = r->init[i];
+                
+                r->pr[i] = temp;
+                r->end[i] = tmp_end;
+                r->init[i] = tmp_init;
+            }
+        }
+    }    //return 값 : Ready Queue
+}
 
 
-/* Process list entry initialization routine */
-struct process *init_process (int pid, int burst, int priority) {
-    struct process *proc;
-    proc = malloc(sizeof(struct process));
-    if (proc == NULL) {
-        printf("Fatal error: memory allocation failure.\nTerminating.\n");
-        exit(1);
-    };
-    proc->pid = pid;
-    proc->burst = burst;
-    proc->priority = priority;
-    proc->working = 0;
-    proc->waiting = 0;
-    proc->next = NULL;
-    return(proc);
-};
-
-
-/* First-Come-First-Served scheduling simulation */
-void fcfs (struct process *proc) {
-    int time = 0, start, end;
-    struct process *tmp = proc;
+void FCFS(process p[],int n){
+    int i = 0;
+    int j = 0;
+    int count = 0;
+    RQ r;
+    int sum = 0; //현재 진행상황. Finish Time Check for Turnaround time
     
-    printf("BEGIN:\tFirst-Come-First-Served scheduling simulation\n");
     
-    while (tmp != NULL) {
-        start = time;
-        time += tmp->burst;
-        end = time;
-        printf("Process: %d\tEnd Time: %d\tWaiting: %d\tTurnaround: %d\n", tmp->pid, time, start, end);
-        tmp = tmp->next;
-    };
+    //Ready Queue에 initial Process를 Arrival Time 순서로 정렬
+    sortArrival(p, n, &r);
     
-    printf("END:\tFirst-Come-First-served scheduling simulation\n\n");
-};
-
-
-/* Process listing */
-void listprocs (struct process *proc) {
-    struct process *tmp = proc;
+    //Ready Queue & unit initialize
+    for(j = 0; j < n; j++){
+        r.init[j] = p[j].arrival;
+        r.end[j] = 0;
+    }
     
-    printf("BEGIN:\tProcess Listing\n");
     
-    while (tmp != NULL) {
-        printf("PID: %d\t\tPriority: %d\tBurst: %d\n", tmp->pid, tmp->priority, tmp->burst);
-        tmp = tmp->next;
-    };
+    printf("FCFS : ");
+    //이제부터 Ready Queue(r.pr[i]) 사용
     
-    printf("END:\tProcess Listing\n\n");
-};
-
-
-/* Priority scheduling simulation
- * Note: lower priority value gets a higher priority
- */
-void priority (struct process *proc) {
-    int time, start, end, highest;
-    struct process *copy, *tmpsrc, *tmp, *beforehighest;
-    
-    printf("BEGIN:\tPriority scheduling simulation\n");
-    
-    /* Duplicate process list */
-    tmpsrc = proc;
-    copy = tmp = NULL;
-    while (tmpsrc != NULL) {
-        if (copy == NULL) {
-            copy = init_process(tmpsrc->pid, tmpsrc->burst, tmpsrc->priority);
-            tmp = copy;
-        } else {
-            tmp->next = init_process(tmpsrc->pid, tmpsrc->burst, tmpsrc->priority);
-            tmp = tmp->next;
-        };
-        tmpsrc = tmpsrc->next;
-    };
-    
-    /* Main routine */
-    time = 0;
-    while (copy != NULL) {
-        /* Find the next job */
-        beforehighest = NULL;
-        highest = copy->priority;
-        tmp = copy->next;
-        tmpsrc = copy;
-        while (tmp != NULL) {
-            if (tmp->priority < highest) {
-                highest = tmp->priority;
-                beforehighest = tmpsrc;
-            };
-            tmpsrc = tmp;
-            tmp = tmp->next;
-        };
+    i = 0;
+    while(count != n){
+        //이 프로세스가 이미 종료된 프로세스가 아니라면
+        if(r.end[i] != 1){
+            //process가 아직 도착하지 않았을떄, 가장 앞에 도착한 애가 올때까지 기다림
+            if(sum < r.pr[i].arrival){
+                for(j = 0; j < r.pr[i].arrival - sum; j++){
+                    printf("z");
+                }
+            }
+            //CPU burst time이 딱 나누어떨어지지 않을때 : cpu_unit의 마지막(나머지)값
+            if(r.pr[i].cpu_per > r.pr[i].cpu_burst){
+                r.pr[i].cpu_per = r.pr[i].cpu_burst;
+            }
+            
+            
+            //현재 프로세스의 CPU burst를 화면에 출력
+            for(j = 0; j < r.pr[i].cpu_per; j++){
+                printf("%d", r.pr[i].pid);
+            }
+            
+            //시간 증가, for turnaround time
+            sum += r.pr[i].cpu_per;
+            
+            //remaining burst로 update
+            r.pr[i].cpu_burst -= r.pr[i].cpu_per;
+            
+////////////////////waiting queue//////////
+            //IO burst time이 딱 나누어떨어지지 않을때 : io_unit의 마지막(나머지)값
+            if(r.pr[i].io_per > r.pr[i].io_burst){
+                r.pr[i].io_per = r.pr[i].io_burst;
+            }
+            
+            r.pr[i].io_burst -= r.pr[i].io_per;
+            
+            //업데이트 된 새로운 프로세스가 진행된 프로세스인 RQ[i]를 대체
+            r.pr[i].arrival = sum + r.pr[i].io_per;
+            
+////////////////////waiting queue//////////
+            
+            
+            //process terminate
+            if((r.pr[i].cpu_burst == 0) && (r.pr[i].io_burst == 0)){
+                //종료 flag
+                r.end[i] = 1;
+                r.pr[i].turnaround = sum - r.init[i];
+                count ++;
+            }
+            
+        }//r.end[i] != 1
         
-        /* Process job and remove from copy of process list */
-        if (beforehighest == NULL) {
-            /* Handle first job is highest priority case */
-            start = time;
-            time += copy->burst;
-            end = time;
-            printf("Process: %d\tEnd Time: %d\tWaiting: %d\tTurnaround: %d\n", copy->pid, time, start, end);
-            tmpsrc = copy->next;
-            free(copy);
-            copy = tmpsrc;
-        } else {
-            /* Handle first job is not highest priority case */
-            tmp = beforehighest->next;
-            start = time;
-            time += tmp->burst;
-            end = time;
-            printf("Process: %d\tEnd Time: %d\tWaiting: %d\tTurnaround: %d\n", tmp->pid, time, start, end);
-            beforehighest->next = tmp->next;
-            free(tmp);
-        };
-    };
-    
-    printf("END:\tPriority scheduling simulation\n\n");
-};
-
-
-/* Round-Robin scheduling simulation */
-void rr (struct process *proc, int quantum) {
-    int jobsremain, passes;
-    struct process *copy, *tmpsrc, *tmp, *slot;
-    
-    printf("BEGIN:\tRound-Robin scheduling simulation (Quantum: %d)\n", quantum);
-    /* Duplicate process list */
-    tmpsrc = proc;
-    copy = tmp = NULL;
-    while (tmpsrc != NULL) {
-        if (copy == NULL) {
-            copy = init_process(tmpsrc->pid, tmpsrc->burst, tmpsrc->priority);
-            tmp = copy;
-        } else {
-            tmp->next = init_process(tmpsrc->pid, tmpsrc->burst, tmpsrc->priority);
-            tmp = tmp->next;
-        };
-        tmpsrc = tmpsrc->next;
-    };
-    
-    /* Main routine */
-    jobsremain = 1;
-    slot = NULL;
-    while (jobsremain) {
-        jobsremain = 0;
+        i = (i+1)%n;
         
-        /* Pick next working slot */
-        if (slot == NULL) {
-            slot = copy;
-            jobsremain = 1;
-        } else {
-            passes = 0;
-            do {
-                if (slot->next == NULL) {
-                    passes++;
-                    slot = copy;
-                } else {
-                    slot = slot->next;
-                };
-            } while (passes <= 2 && slot->burst <= slot->working);
-            if (passes <= 2) {
-                jobsremain = 1;
-            };
-        };
-        
-        /* Perform a cycle */
-        tmp = copy;
-        while (tmp != NULL) {
-            if (tmp->burst > tmp->working) {
-                if (tmp == slot) {
-                    tmp->working += quantum;
-                } else {
-                    tmp->waiting += quantum;
-                };
-            };
-            tmp = tmp->next;
-        };
-    };
+        //한바퀴 다 돌았으면 다시 sorting (Waiting Queue 구현용)
+        if (i == 0){
+            sortArrival(r.pr, n, &r);
+        }
+    }//while
     
-    /* Display statistics and clean up copy */
-    tmp = copy;
-    while (tmp != NULL) {
-        printf("Process: %d\tWorking: %d\tWaiting: %d\tTurnaround: %d\n", tmp->pid, tmp->working, tmp->waiting, tmp->working + tmp->waiting);
-        tmpsrc = tmp;
-        tmp = tmp->next;
-        free(tmpsrc);
-    };
+    printf("\n\n");
     
-    printf("END:\tRR scheduling simulation\n\n");
-};
+}
 
 
-/* Shortest Job First scheduling simulation */
-void sjf (struct process *proc) {
-    int time, start, end, shortest;
-    struct process *copy, *tmpsrc, *tmp, *beforeshortest;
+int main(){
+    process p[20];
+    //float avg_WT, avg_TAT;
+
+    int i = 0;
+    int n;
+    srand((unsigned int)time(NULL));
     
-    printf("BEGIN:\tShortest Job First scheduling simulation\n");
+    printf("\nEnter total number of process : ");
+    scanf("%d", &n);
     
-    /* Duplicate process list */
-    tmpsrc = proc;
-    copy = tmp = NULL;
-    while (tmpsrc != NULL) {
-        if (copy == NULL) {
-            copy = init_process(tmpsrc->pid, tmpsrc->burst, tmpsrc->priority);
-            tmp = copy;
-        } else {
-            tmp->next = init_process(tmpsrc->pid, tmpsrc->burst, tmpsrc->priority);
-            tmp = tmp->next;
-        };
-        tmpsrc = tmpsrc->next;
-    };
-    
-    /* Main routine */
-    time = 0;
-    while (copy != NULL) {
-        /* Find the next job */
-        beforeshortest = NULL;
-        shortest = copy->burst;
-        tmp = copy->next;
-        tmpsrc = copy;
-        while (tmp != NULL) {
-            if (tmp->burst < shortest) {
-                shortest = tmp->burst;
-                beforeshortest = tmpsrc;
-            };
-            tmpsrc = tmp;
-            tmp = tmp->next;
-        };
+////////Configuration
+    for(i = 0; i < n; i++)
+    {
+        //arrival : 0~5
+        p[i].arrival = rand()%6;
         
-        /* Process job and remove from copy of process list */
-        if (beforeshortest == NULL) {
-            /* Handle first job is shortest case */
-            start = time;
-            time += copy->burst;
-            end = time;
-            printf("Process: %d\tEnd Time: %d\tWaiting: %d\tTurnaround: %d\n", copy->pid, time, start, end);
-            tmpsrc = copy;
-            copy = copy->next;
-            free(tmpsrc);
-        } else {
-            /* Handle first job is not shortest case */
-            tmp = beforeshortest->next;
-            start = time;
-            time += tmp->burst;
-            end = time;
-            printf("Process: %d\tEnd Time: %d\tWaiting: %d\tTurnaround: %d\n", tmp->pid, time, start, end);
-            beforeshortest->next = tmp->next;
-            free(tmp);
-        };
-    };
+        //cpu_burst : 3~9
+        p[i].cpu_burst = rand()%7 + 3;
+        
+        //io_burst : 3~9
+        p[i].io_burst = rand()%7 + 3;
+        
+        //io_unit : 1~3
+        p[i].io_unit = rand()%3 + 1;
+        
+        //초기화
+        p[i].turnaround = 0;
+        p[i].waiting = 0;
+        
+        //한번 실행때 진행되는 unit
+        p[i].cpu_per = ((p[i].cpu_burst + 1)/p[i].io_unit);
+        p[i].io_per = ((p[i].io_burst + 1)/p[i].io_unit); //올림값
+        
+        p[i].pid = i;
+        
+        //priority : 1~99 (숫자가 겹치는걸 최대한 방지하기 위해서)
+        p[i].priority = rand()%100;
+    }
     
-    printf("END:\tShortest Job First scheduling simulation\n\n");
-};
+    display_table(p, n);
+    ///Fisrt Come First Served
+    FCFS(p, n);
+    
+    return 0;
+}
