@@ -201,6 +201,78 @@ void SJF_P(process p[], int n){
 }
 
 
+void Priority_P(process p[], int n){
+    //preemptive는 매 시간 check
+    int time = 0;
+    int i, end_count = 0;
+    int delete = 0;
+    Queue r,w,c; //ready, waiting, current
+    r.num = -1, w.num = -1, c.num = -1; //초기화
+    
+    //c에 initial process 저장 :D
+    for(i=0; i<n; i++){
+        c.num++;
+        c.pr[i] = p[i];
+    }
+    
+    printf("Priority Preemptive: ");
+    while(n != end_count){
+        
+        //1. waiting queue -> ready queue
+        for (i = 0; i <= w.num; i++){
+            if(w.pr[i].io == w.pr[i].io_per){
+                w.pr[i].io = 0;
+                //printf("\n%d가 ready queue로 이동합니다.\n", w.pr[i].pid);
+                r.pr[++r.num] = w.pr[i];
+                
+                //큐에서 삭제
+                w.pr[i].end = 0;
+                delete++;
+            }
+            else{
+                w.pr[i].io++;
+                w.pr[i].arrival++;
+            }
+        }
+        arrange(&w);
+        w.num -= delete;
+        delete = 0;
+        
+        //2. 현재 time에 도착한 프로세스를 ready queue로
+        for (i = 0; i <= c.num; i++){
+            if (time == c.pr[i].arrival)
+                r.pr[++r.num] = c.pr[i];
+        }
+        
+        i = r.num;
+        //3. ready queue -> waiting queue
+        if(i == -1 || r.pr[i].arrival > time)
+            printf("z");
+        else{
+            sortPriority(&r);
+            
+            r.pr[i].cpu ++;
+            r.pr[i].cpu_burst --;
+            r.pr[i].arrival ++;
+            printf("%d", r.pr[i].pid);
+            
+            if(r.pr[i].cpu_burst == 0){
+                //printf("\n%d가 종료되었습니다.\n", r.pr[i].pid);
+                end_count ++;
+                r.num--;
+            }
+            else if(r.pr[i].cpu == r.pr[i].cpu_per){
+                r.pr[i].cpu = 0;
+                //printf("\n%d가 waiting queue로 이동합니다.\n", r.pr[i].pid);
+                w.pr[++w.num] = r.pr[r.num--];
+            }
+        }
+        time++;
+    }
+    printf("\n\n");
+}
+
+
 int main(){
     process p[20];
     int i = 0;
@@ -239,5 +311,6 @@ int main(){
     
     display_table(p,n);
     SJF_P(p,n);
+    Priority_P(p,n);
     return 0;
 }
